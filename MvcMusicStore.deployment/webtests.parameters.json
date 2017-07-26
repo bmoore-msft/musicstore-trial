@@ -1,0 +1,16 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "webTestIds": {
+      "value": [
+        "00bf43b7-a80d-4840-b170-63c615c86ef3",
+        "11bf43b7-a80d-4840-b170-63c615c86ef3",
+        "22bf43b7-a80d-4840-b170-63c615c86ef3",
+        "34bf43b7-a80d-4840-b170-63c615c86ef3",
+        "45bf43b7-a80d-4840-b170-63c615c86ef3",
+        "56bf43b7-a80d-4840-b170-63c615c86ef3"
+      ]
+    }
+  }
+}

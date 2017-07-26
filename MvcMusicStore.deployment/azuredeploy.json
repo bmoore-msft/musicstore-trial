@@ -1,0 +1,408 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "siteName": {
+      "type": "string",
+      "defaultValue": "musicstore-trial-test"
+    },
+    "appInsightsName": {
+      "type": "string",
+      "defaultValue": "musicstore-ai-trial-test"
+    },
+    "sqlServerName": {
+      "type": "string",
+      "defaultValue": "musicstore-svr-trial"
+    },
+    "sqlAdminLogin": {
+      "type": "string",
+      "defaultValue": "azuretoolsadmin"
+    },
+    "sqlAdminPassword": {
+      "type": "securestring"
+    },
+    "databaseName": {
+      "type": "string",
+      "defaultValue": "musicstore-db"
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring"
+    },
+    "_artifactsLocation": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "resourceLocation": "southcentralus",
+    "appServicePlanName": "[concat(parameters('siteName'), '-appserviceplan')]",
+    "bacpacUri": "[concat(parameters('_artifactsLocation'), '/database/musicstore-db-source.bacpac')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2015-08-01",
+      "name": "[parameters('siteName')]",
+      "location": "[variables('resourceLocation')]",
+      "tags": {
+        "[concat('hidden-related:', resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName')))]": "empty",
+        "displayName": "webSite"
+      },
+      "dependsOn": [
+        "[variables('appServicePlanName')]",
+        "[parameters('sqlServerName')]",
+        "[parameters('appInsightsName')]"
+      ],
+      "kind": "WebApp",
+      "properties": {
+        "name": "[parameters('siteName')]",
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "kind": "WebApp"
+      },
+      "resources": [
+        {
+          "type": "config",
+          "name": "connectionstrings",
+          "apiVersion": "2015-08-01",
+          "dependsOn": [
+            "[parameters('siteName')]"
+          ],
+          "properties": {
+            "DefaultConnection": {
+              "value": "[concat('Data Source=tcp:', reference(concat('Microsoft.Sql/servers/', parameters('sqlServerName'))).fullyQualifiedDomainName, ',1433;Initial Catalog=', parameters('databaseName'), ';User Id=', parameters('sqlAdminLogin'), '@', parameters('sqlServerName'), ';Password=', parameters('sqlAdminPassword'))]",
+              "type": "SQLAzure"
+            },
+            "MusicStoreEntities": {
+              "value": "[concat('Data Source=tcp:', reference(concat('Microsoft.Sql/servers/', parameters('sqlServerName'))).fullyQualifiedDomainName, ',1433;Initial Catalog=', parameters('databaseName'), ';User Id=', parameters('sqlAdminLogin'), '@', parameters('sqlServerName'), ';Password=', parameters('sqlAdminPassword'))]",
+              "type": "SQLAzure"
+            }
+          }
+        },
+        {
+          "name": "appsettings",
+          "type": "config",
+          "apiVersion": "2015-08-01",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', parameters('siteName'))]"
+          ],
+          "tags": {
+            "displayName": "appSettings"
+          },
+          "properties": {
+            "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName'))).InstrumentationKey]"
+          }
+        }
+      ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2015-08-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[variables('resourceLocation')]",
+      "tags": {
+        "displayName": "appServicePlan"
+      },
+      "sku": {
+        "name": "S1",
+        "tier": "Standard",
+        "family": "S1",
+        "size": "S"
+      },
+      "properties": {
+        "name": "[variables('appServicePlanName')]"
+      }
+    },
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "2014-04-01",
+      "name": "[parameters('sqlServerName')]",
+      "location": "[variables('resourceLocation')]",
+      "tags": {
+        "displayName": "sqlServer"
+      },
+      "properties": {
+        "administratorLogin": "[parameters('sqlAdminLogin')]",
+        "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
+        "version": "12.0"
+      },
+      "resources": [
+        {
+          "type": "firewallRules",
+          "apiVersion": "2014-04-01",
+          "name": "AllowAllAzureIPs",
+          "location": "[variables('resourceLocation')]",
+          "dependsOn": [
+            "[parameters('sqlServerName')]"
+          ],
+          "properties": {
+            "endIpAddress": "0.0.0.0",
+            "startIpAddress": "0.0.0.0"
+          }
+        },
+        {
+          "type": "databases",
+          "apiVersion": "2015-01-01",
+          "name": "[parameters('databaseName')]",
+          "location": "[variables('resourceLocation')]",
+          "tags": {
+            "displayName": "database"
+          },
+          "dependsOn": [
+            "[parameters('sqlServerName')]"
+          ],
+          "properties": { },
+          "resources": [
+            {
+              "name": "dbImport",
+              "type": "extensions",
+              "apiVersion": "2014-04-01",
+              "dependsOn": [
+                "[parameters('databaseName')]"
+              ],
+              "tags": {
+                "displayName": "dbImport"
+              },
+              "properties": {
+                "storageKeyType": "SharedAccessKey",
+                "storageKey": "[parameters('_artifactsLocationSasToken')]",
+                "storageUri": "[variables('bacpacUri')]",
+                "administratorLogin": "[parameters('sqlAdminLogin')]",
+                "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
+                "operationMode": "Import"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/autoscalesettings",
+      "apiVersion": "2015-04-01",
+      "name": "[concat(variables('appServicePlanName'), '-', resourceGroup().name)]",
+      "location": "[variables('resourceLocation')]",
+      "tags": {
+        "[concat('hidden-link:', resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName')))]": "Resource",
+        "displayName": "AutoScaleSettings"
+      },
+      "dependsOn": [
+        "[variables('appServicePlanName')]"
+      ],
+      "properties": {
+        "profiles": [
+          {
+            "name": "Default",
+            "capacity": {
+              "minimum": 1,
+              "maximum": 2,
+              "default": 1
+            },
+            "rules": [
+              {
+                "metricTrigger": {
+                  "metricName": "CpuPercentage",
+                  "metricResourceUri": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+                  "timeGrain": "PT1M",
+                  "statistic": "Average",
+                  "timeWindow": "PT10M",
+                  "timeAggregation": "Average",
+                  "operator": "GreaterThan",
+                  "threshold": 80.0
+                },
+                "scaleAction": {
+                  "direction": "Increase",
+                  "type": "ChangeCount",
+                  "value": 1,
+                  "cooldown": "PT10M"
+                }
+              },
+              {
+                "metricTrigger": {
+                  "metricName": "CpuPercentage",
+                  "metricResourceUri": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+                  "timeGrain": "PT1M",
+                  "statistic": "Average",
+                  "timeWindow": "PT1H",
+                  "timeAggregation": "Average",
+                  "operator": "LessThan",
+                  "threshold": 60.0
+                },
+                "scaleAction": {
+                  "direction": "Decrease",
+                  "type": "ChangeCount",
+                  "value": 1,
+                  "cooldown": "PT1H"
+                }
+              }
+            ]
+          }
+        ],
+        "enabled": false,
+        "name": "[concat(variables('appServicePlanName'), '-', resourceGroup().name)]",
+        "targetResourceUri": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
+      }
+    },
+    {
+      "type": "Microsoft.Insights/alertrules",
+      "apiVersion": "2016-03-01",
+      "name": "[concat('ServerErrors ', parameters('siteName'))]",
+      "location": "[variables('resourceLocation')]",
+      "dependsOn": [
+        "[parameters('siteName')]"
+      ],
+      "tags": {
+        "[concat('hidden-link:', resourceId('Microsoft.Web/sites', parameters('siteName')))]": "Resource",
+        "displayName": "ServerErrorsAlertRule"
+      },
+      "properties": {
+        "name": "[concat('ServerErrors ', parameters('siteName'))]",
+        "description": "[concat(parameters('siteName'), ' has some server errors, status code 5xx.')]",
+        "isEnabled": false,
+        "condition": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.ThresholdRuleCondition",
+          "dataSource": {
+            "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleMetricDataSource",
+            "resourceUri": "[resourceId('Microsoft.Web/sites', parameters('siteName'))]",
+            "metricName": "Http5xx"
+          },
+          "operator": "GreaterThan",
+          "threshold": 0.0,
+          "windowSize": "PT5M"
+        },
+        "action": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleEmailAction",
+          "sendToServiceOwners": true,
+          "customEmails": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/alertrules",
+      "apiVersion": "2016-03-01",
+      "name": "[concat('ForbiddenRequests ', parameters('siteName'))]",
+      "location": "[variables('resourceLocation')]",
+      "dependsOn": [
+        "[parameters('siteName')]"
+      ],
+      "tags": {
+        "[concat('hidden-link:', resourceId('Microsoft.Web/sites', parameters('siteName')))]": "Resource",
+        "displayName": "ForbiddenRequestsAlertRule"
+      },
+      "properties": {
+        "name": "[concat('ForbiddenRequests ', parameters('siteName'))]",
+        "description": "[concat(parameters('siteName'), ' has some requests that are forbidden, status code 403.')]",
+        "isEnabled": false,
+        "condition": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.ThresholdRuleCondition",
+          "dataSource": {
+            "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleMetricDataSource",
+            "resourceUri": "[resourceId('Microsoft.Web/sites', parameters('siteName'))]",
+            "metricName": "Http403"
+          },
+          "operator": "GreaterThan",
+          "threshold": 0,
+          "windowSize": "PT5M"
+        },
+        "action": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleEmailAction",
+          "sendToServiceOwners": true,
+          "customEmails": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/alertrules",
+      "apiVersion": "2016-03-01",
+      "name": "[concat('CPUHigh ', variables('appServicePlanName'))]",
+      "location": "[variables('resourceLocation')]",
+      "dependsOn": [
+        "[variables('appServicePlanName')]"
+      ],
+      "tags": {
+        "[concat('hidden-link:', resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName')))]": "Resource",
+        "displayName": "CPUHighAlertRule"
+      },
+      "properties": {
+        "name": "[concat('CPUHigh ', variables('appServicePlanName'))]",
+        "description": "[concat('The average CPU is high across all the instances of ', variables('appServicePlanName'))]",
+        "isEnabled": false,
+        "condition": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.ThresholdRuleCondition",
+          "dataSource": {
+            "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleMetricDataSource",
+            "resourceUri": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+            "metricName": "CpuPercentage"
+          },
+          "operator": "GreaterThan",
+          "threshold": 90,
+          "windowSize": "PT15M"
+        },
+        "action": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleEmailAction",
+          "sendToServiceOwners": true,
+          "customEmails": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/alertrules",
+      "apiVersion": "2016-03-01",
+      "name": "[concat('LongHttpQueue ', variables('appServicePlanName'))]",
+      "location": "[variables('resourceLocation')]",
+      "dependsOn": [
+        "[variables('appServicePlanName')]"
+      ],
+      "tags": {
+        "[concat('hidden-link:', resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName')))]": "Resource",
+        "displayName": "AutoScaleSettings"
+      },
+      "properties": {
+        "name": "[concat('LongHttpQueue ', variables('appServicePlanName'))]",
+        "description": "[concat('The HTTP queue for the instances of ', variables('appServicePlanName'), ' has a large number of pending requests.')]",
+        "isEnabled": false,
+        "condition": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.ThresholdRuleCondition",
+          "dataSource": {
+            "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleMetricDataSource",
+            "resourceUri": "[concat(resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', variables('appServicePlanName'))]",
+            "metricName": "HttpQueueLength"
+          },
+          "operator": "GreaterThan",
+          "threshold": 100.0,
+          "windowSize": "PT5M"
+        },
+        "action": {
+          "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleEmailAction",
+          "sendToServiceOwners": true,
+          "customEmails": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2015-05-01",
+      "name": "[parameters('appInsightsName')]",
+      "location": "southcentralus",
+      "dependsOn": [],
+      "tags": {
+        "[concat('hidden-link:', resourceId('Microsoft.Web/sites', parameters('siteName')))]": "Resource",
+        "displayName": "AppInsightsComponent"
+      },
+      "properties": {
+        "ApplicationId": "[parameters('siteName')]"
+      }
+    }
+  ],
+  "outputs": {
+    "siteUri": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites/', parameters('siteName'))).hostnames[0]]"
+    },
+    "sqlSvrFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Sql/servers/', parameters('sqlServerName'))).fullyQualifiedDomainName]"
+    },
+    "appInsightsKey": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName'))).InstrumentationKey]"
+    }
+  }
+}
