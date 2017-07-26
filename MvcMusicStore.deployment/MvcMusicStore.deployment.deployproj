@@ -26,7 +26,7 @@
   <!-- vertag<:>end -->
   <ItemGroup>
     <Content Include="azuredeploy.json" />
-    <Content Include="azuredeploy.parameters.json" />
+    <Content Include="azuredeploy.parameters.test.json" />
     <Content Include="azuredeploy.parameters.prod.json" />
     <Content Include="database\musicstore-db-source.bacpac" />
     <None Include="Deployment.targets">
@@ -34,7 +34,7 @@
     </None>
     <Content Include="Deploy-AzureResourceGroup.ps1" />
     <Content Include="webtests.json" />
-    <Content Include="webtests.parameters.json" />
+    <Content Include="webtests.parameters.test.json" />
     <Content Include="webtests.parameters.prod.json" />
   </ItemGroup>
   <Target Name="GetReferenceAssemblyPaths" />
