@@ -134,7 +134,7 @@
         "Name": "AlbumDetails100",
         "Description": "WebTest - Album Details (100-200)",
         "Enabled": true,
-        "Frequency": 900,
+        "Frequency": 600,
         "Timeout": 120,
         "Kind": "multistep",
         "Locations": [
@@ -236,7 +236,7 @@
         "Name": "AlbumDetails400",
         "Description": "WebTest - AlbumDetails (400-500)",
         "Enabled": true,
-        "Frequency": 900,
+        "Frequency": 300,
         "Timeout": 120,
         "Kind": "multistep",
         "Locations": [
